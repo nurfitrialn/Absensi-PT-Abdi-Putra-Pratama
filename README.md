@@ -1,102 +1,154 @@
 # Absensi-PT-Abdi-Putra-Pratama
 Absensi Untuk Karyawan PT Abdi Putra Pratama
+/*
+Struktur folder:
+- absensi/
+  |- index.php         (Form absensi masuk & pulang)
+  |- login.php         (Halaman login)
+  |- admin.php         (Halaman admin dengan filter dan export)
+  |- proses_login.php  (Cek login)
+  |- logout.php        (Logout user)
+  |- koneksi.php       (Koneksi database)
+  |- simpan_absen.php  (Proses absen masuk & pulang)
+  |- export_excel.php  (Export data ke Excel)
+*/
 
-Website ini adalah aplikasi absensi sederhana berbasis PHP dan MySQL. Cocok digunakan untuk keperluan sekolah, kantor, atau organisasi kecil.
+// koneksi.php
+<?php
+$host = "localhost";
+$user = "root";
+$pass = "";
+$db   = "absensi";
+$conn = mysqli_connect($host, $user, $pass, $db);
+if (!$conn) {
+    die("Koneksi gagal: " . mysqli_connect_error());
+}
+?>
 
----
+// login.php
+<!DOCTYPE html>
+<html>
+<head><title>Login</title></head>
+<body>
+<h2>Login</h2>
+<form action="proses_login.php" method="post">
+  <input type="text" name="username" placeholder="Username" required><br>
+  <input type="password" name="password" placeholder="Password" required><br>
+  <button type="submit">Login</button>
+</form>
+</body>
+</html>
 
-## 🎯 Fitur
-- Login pengguna dan admin
-- Absen masuk dengan pencatatan waktu
-- Halaman admin untuk melihat seluruh data absensi
+// proses_login.php
+<?php
+session_start();
+include 'koneksi.php';
+$user = $_POST['username'];
+$pass = $_POST['password'];
+$query = mysqli_query($conn, "SELECT * FROM users WHERE username='$user' AND password='$pass'");
+$data = mysqli_fetch_assoc($query);
+if ($data) {
+    $_SESSION['user_id'] = $data['id'];
+    $_SESSION['role'] = $data['role'];
+    header("Location: index.php");
+} else {
+    echo "Login gagal.";
+}
+?>
 
----
+// logout.php
+<?php
+session_start();
+session_destroy();
+header("Location: login.php");
+?>
 
-## 🗂️ Struktur File
+// index.php
+<?php
+session_start();
+include 'koneksi.php';
+if (!isset($_SESSION['user_id'])) header("Location: login.php");
+?>
+<!DOCTYPE html>
+<html>
+<head><title>Absensi</title></head>
+<body>
+<h2>Form Absensi</h2>
+<form action="simpan_absen.php" method="post">
+  <input type="text" name="nama" placeholder="Nama Lengkap" required><br>
+  <button type="submit" name="absen_masuk">Absen Masuk</button>
+  <button type="submit" name="absen_pulang">Absen Pulang</button>
+</form>
+<a href="logout.php">Logout</a>
+</body>
+</html>
 
-```
-absensi/
-├── admin.php            # Halaman admin
-├── index.php            # Form absensi (user)
-├── koneksi.php          # Koneksi ke database
-├── login.php            # Form login
-├── logout.php           # Logout session
-├── proses_login.php     # Proses autentikasi
-├── simpan_absen.php     # Simpan data absensi
-```
+// simpan_absen.php
+<?php
+session_start();
+include 'koneksi.php';
+$user_id = $_SESSION['user_id'];
+$nama = $_POST['nama'];
+$tanggal = date("Y-m-d");
+$waktu = date("Y-m-d H:i:s");
 
----
+if (isset($_POST['absen_masuk'])) {
+    mysqli_query($conn, "INSERT INTO absensi (user_id, nama, waktu_masuk) VALUES ('$user_id', '$nama', '$waktu')");
+} elseif (isset($_POST['absen_pulang'])) {
+    mysqli_query($conn, "UPDATE absensi SET waktu_pulang='$waktu' WHERE user_id='$user_id' AND DATE(waktu_masuk)='$tanggal'");
+}
+header("Location: index.php");
+?>
 
-## ⚙️ Instalasi Lokal
+// admin.php
+<?php
+session_start();
+include 'koneksi.php';
+if ($_SESSION['role'] !== 'admin') die("Akses ditolak.");
+$tanggal = isset($_GET['tanggal']) ? $_GET['tanggal'] : date("Y-m-d");
+$query = mysqli_query($conn, "SELECT * FROM absensi WHERE DATE(waktu_masuk)='$tanggal'");
+?>
+<!DOCTYPE html>
+<html>
+<head><title>Data Absensi</title></head>
+<body>
+<h2>Data Absensi - <?= $tanggal ?></h2>
+<form method="get">
+  <input type="date" name="tanggal" value="<?= $tanggal ?>">
+  <button type="submit">Filter</button>
+</form>
+<table border="1">
+<tr><th>Nama</th><th>Masuk</th><th>Pulang</th></tr>
+<?php while ($row = mysqli_fetch_assoc($query)) { ?>
+<tr>
+  <td><?= $row['nama'] ?></td>
+  <td><?= $row['waktu_masuk'] ?></td>
+  <td><?= $row['waktu_pulang'] ?: '-' ?></td>
+</tr>
+<?php } ?>
+</table>
+<br>
+<a href="export_excel.php?tanggal=<?= $tanggal ?>">Export ke Excel</a>
+<br><br><a href="logout.php">Logout</a>
+</body>
+</html>
 
-### 1. Clone Repository
-```bash
-git clone https://github.com/username/website-absensi.git
-cd website-absensi
-```
+// export_excel.php
+<?php
+include 'koneksi.php';
+$tanggal = $_GET['tanggal'] ?? date("Y-m-d");
+header("Content-Type: application/vnd.ms-excel");
+header("Content-Disposition: attachment; filename=absensi_$tanggal.xls");
 
-### 2. Jalankan XAMPP / Laragon
-- Tempatkan folder ini di direktori `htdocs/` (untuk XAMPP)
-- Jalankan Apache dan MySQL
-
-### 3. Buat Database di phpMyAdmin
-```sql
-CREATE DATABASE absensi;
-
-USE absensi;
-
-CREATE TABLE users (
-  id INT AUTO_INCREMENT PRIMARY KEY,
-  username VARCHAR(50),
-  password VARCHAR(255),
-  role ENUM('admin', 'user')
-);
-
-CREATE TABLE absensi (
-  id INT AUTO_INCREMENT PRIMARY KEY,
-  user_id INT,
-  nama VARCHAR(100),
-  waktu_masuk DATETIME,
-  waktu_pulang DATETIME,
-  FOREIGN KEY (user_id) REFERENCES users(id)
-);
-```
-
-### 4. Tambahkan User Manual
-```sql
-INSERT INTO users (username, password, role) VALUES ('admin', 'admin123', 'admin');
-```
-
-### 5. Akses Website
-Buka browser dan kunjungi:
-```
-http://localhost/website-absensi/login.php
-```
-
----
-
-## 🚀 Deployment (Opsional)
-Jika ingin di-hosting secara online:
-
-### Opsi 1: Upload ke Hosting Gratis
-- Gunakan [000webhost.com](https://000webhost.com) atau [InfinityFree.net](https://infinityfree.net)
-- Upload file ZIP, ekstrak, dan sesuaikan koneksi database
-
-### Opsi 2: Deploy dari GitHub
-- Gunakan platform seperti [Render](https://render.com) atau [Railway](https://railway.app)
-- Hubungkan repository ini
-- Siapkan environment PHP dan koneksi database online
-
----
-
-## 📄 Lisensi
-Proyek ini open-source, bebas digunakan dan dimodifikasi untuk keperluan pribadi atau organisasi.
-
----
-
-## 🤝 Kontribusi
-Pull request sangat dipersilakan. Untuk perubahan besar, buka issue terlebih dahulu.
-
----
-
-Jika kamu butuh bantuan tambahan (export Excel, fitur absen pulang, dsb.), silakan buka issue atau hubungi developer.
+$query = mysqli_query($conn, "SELECT * FROM absensi WHERE DATE(waktu_masuk)='$tanggal'");
+echo "<table border='1'>
+<tr><th>Nama</th><th>Masuk</th><th>Pulang</th></tr>";
+while ($row = mysqli_fetch_assoc($query)) {
+    echo "<tr>
+      <td>{$row['nama']}</td>
+      <td>{$row['waktu_masuk']}</td>
+      <td>" . ($row['waktu_pulang'] ?: '-') . "</td>
+    </tr>";
+}
+echo "</table>";
+?>
